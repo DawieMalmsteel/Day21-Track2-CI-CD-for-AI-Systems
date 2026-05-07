@@ -1,40 +1,52 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from google.cloud import storage
 import joblib
 import os
 
+# Import cloud SDK lazily to allow local dev without provider SDK
+try:
+    from google.cloud import storage
+except Exception:
+    storage = None
+
 app = FastAPI()
 
-GCS_BUCKET = os.environ["GCS_BUCKET"]
+GCS_BUCKET = os.environ.get("GCS_BUCKET", "")
 GCS_MODEL_KEY = "models/latest/model.pkl"
 MODEL_PATH = os.path.expanduser("~/models/model.pkl")
 
 
 def download_model():
     """
-    Tai file model.pkl tu GCS ve may khi server khoi dong.
+    Tải file model.pkl từ GCS về máy khi server khởi động.
 
-    Ham nay duoc goi mot lan khi module duoc import. Su dung
-    GOOGLE_APPLICATION_CREDENTIALS de xac thuc (duoc dat trong systemd service).
+    Nếu không có biến môi trường/SDK, chỉ in cảnh báo. Nếu file
+    đã tồn tại cục bộ, không tải lại.
     """
-    # TODO 1: Tao storage.Client()
-    # client = storage.Client()
+    # Nếu model đã tồn tại cục bộ, giữ nguyên
+    os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
+    if os.path.exists(MODEL_PATH):
+        print(f"Model already exists at {MODEL_PATH}, skipping download.")
+        return
 
-    # TODO 2: Lay bucket va blob tuong ung
-    # bucket = client.bucket(GCS_BUCKET)
-    # blob   = bucket.blob(GCS_MODEL_KEY)
+    if not GCS_BUCKET or storage is None:
+        print("GCS_BUCKET not set or google-cloud-storage not available; skipping download.")
+        return
 
-    # TODO 3: Tai file model xuong may
-    # blob.download_to_filename(MODEL_PATH)
+    try:
+        client = storage.Client()
+        bucket = client.bucket(GCS_BUCKET)
+        blob = bucket.blob(GCS_MODEL_KEY)
+        blob.download_to_filename(MODEL_PATH)
+        print(f"Model downloaded from gs://{GCS_BUCKET}/{GCS_MODEL_KEY} to {MODEL_PATH}")
+    except Exception as e:
+        print(f"Failed to download model from GCS: {e}")
 
-    # TODO 4: In thong bao thanh cong
-    # print("Model da duoc tai xuong tu GCS.")
 
-    pass  # xoa dong nay sau khi hoan thanh tat ca TODO ben tren
-
-
+# Try to download model (no-op if not configured)
 download_model()
+
+# If model missing, loading will raise and server should fail fast
 model = joblib.load(MODEL_PATH)
 
 
@@ -45,39 +57,33 @@ class PredictRequest(BaseModel):
 @app.get("/health")
 def health():
     """
-    Endpoint kiem tra suc khoe server.
-    GitHub Actions goi endpoint nay sau khi deploy de xac nhan server dang chay.
+    Endpoint kiểm tra sức khỏe server.
+    GitHub Actions gọi endpoint này sau khi deploy để xác nhận server đang chạy.
 
-    Tra ve: {"status": "ok"}
+    Trả về: {"status": "ok"}
     """
-    # TODO 5: Tra ve dict {"status": "ok"}
-    pass  # xoa dong nay sau khi hoan thanh
+    return {"status": "ok"}
 
 
 @app.post("/predict")
 def predict(req: PredictRequest):
     """
-    Endpoint suy luan chinh.
+    Endpoint suy luận chính.
 
-    Dau vao : JSON {"features": [f1, f2, ..., f12]}
-    Dau ra  : JSON {"prediction": <0|1|2>, "label": <"thap"|"trung_binh"|"cao">}
-
-    Thu tu 12 dac trung (khop voi thu tu trong FEATURE_NAMES cua test):
-        fixed_acidity, volatile_acidity, citric_acid, residual_sugar,
-        chlorides, free_sulfur_dioxide, total_sulfur_dioxide, density,
-        pH, sulphates, alcohol, wine_type
+    Đầu vào : JSON {"features": [f1, f2, ..., f12]}
+    Đầu ra : JSON {"prediction": <0|1|2>, "label": <"thap"|"trung_binh"|"cao">}
     """
-    # TODO 6: Kiem tra so luong dac trung.
-    # Neu len(req.features) != 12, raise HTTPException(status_code=400, ...)
+    if not isinstance(req.features, list) or len(req.features) != 12:
+        raise HTTPException(status_code=400, detail="Expected 12 features (wine quality)")
 
-    # TODO 7: Goi model.predict([req.features]) de lay ket qua du doan.
-    # pred = model.predict(...)
+    try:
+        pred = model.predict([req.features])
+        pred_int = int(pred[0])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Model prediction failed: {e}")
 
-    # TODO 8: Tra ve dict chua "prediction" (int) va "label" (string).
-    # Nhan tuong ung: 0 -> "thap", 1 -> "trung_binh", 2 -> "cao"
-    # return {"prediction": ..., "label": ...}
-
-    pass  # xoa dong nay sau khi hoan thanh tat ca TODO ben tren
+    labels = {0: "thap", 1: "trung_binh", 2: "cao"}
+    return {"prediction": pred_int, "label": labels.get(pred_int, "unknown")}
 
 
 if __name__ == "__main__":
