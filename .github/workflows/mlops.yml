@@ -117,7 +117,7 @@ jobs:
         with:
           host: ${{ secrets.VM_HOST }}
           username: ${{ secrets.VM_USER }}
-          key: ${{ secrets.VM_SSH_KEY }}
+          key: ${{ secrets.VM_SSH_KEY }} # <--- QUAN TRỌNG: Đảm bảo dòng này có mặt
           script: |
             sudo systemctl restart mlops-serve
             sleep 5
