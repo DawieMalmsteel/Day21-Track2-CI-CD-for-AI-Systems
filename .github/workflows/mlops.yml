@@ -64,10 +64,10 @@ jobs:
         id: read_metrics
         run: |
           ACC=$(python - <<'PY'
-import json
-print(json.load(open('outputs/metrics.json'))['accuracy'])
-PY
-)
+          import json
+          print(json.load(open('outputs/metrics.json'))['accuracy'])
+          PY
+          )
           echo "accuracy=$ACC" >> $GITHUB_OUTPUT
 
       - name: Upload model to Cloud Storage
@@ -75,14 +75,14 @@ PY
           CLOUD_BUCKET: ${{ secrets.CLOUD_BUCKET }}
         run: |
           python - <<'EOF'
-from google.cloud import storage
-import os
-client = storage.Client()
-bucket = client.bucket(os.environ['CLOUD_BUCKET'])
-blob = bucket.blob('models/latest/model.pkl')
-blob.upload_from_filename('models/model.pkl')
-print('Uploaded model to', os.environ['CLOUD_BUCKET'])
-EOF
+          from google.cloud import storage
+          import os
+          client = storage.Client()
+          bucket = client.bucket(os.environ['CLOUD_BUCKET'])
+          blob = bucket.blob('models/latest/model.pkl')
+          blob.upload_from_filename('models/model.pkl')
+          print('Uploaded model to', os.environ['CLOUD_BUCKET'])
+          EOF
 
       - name: Save metrics as artifact
         uses: actions/upload-artifact@v4
@@ -98,13 +98,13 @@ EOF
       - name: Check eval gate
         run: |
           python - <<'PY'
-import sys
-acc = float("${{ needs.train.outputs.accuracy }}")
-if acc < 0.70:
-    print(f"FAILED: accuracy {acc:.4f} < 0.70. Aborting deploy.")
-    sys.exit(1)
-print(f"PASSED: accuracy {acc:.4f} >= 0.70. Proceeding to deploy.")
-PY
+          import sys
+          acc = float("${{ needs.train.outputs.accuracy }}")
+          if acc < 0.70:
+              print(f"FAILED: accuracy {acc:.4f} < 0.70. Aborting deploy.")
+              sys.exit(1)
+          print(f"PASSED: accuracy {acc:.4f} >= 0.70. Proceeding to deploy.")
+          PY
 
   deploy:
     name: Deploy
