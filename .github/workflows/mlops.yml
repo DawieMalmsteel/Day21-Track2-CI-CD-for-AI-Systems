@@ -11,9 +11,14 @@ on:
 
 jobs:
 
-  # JOB 1: Chay unit tests tren du lieu ao (khong can GCS)
+  # ---------------------------------------------------------------------------
+  # JOB 1 - UNIT TEST
+  # Chay unit tests tren du lieu ao (khong can ket noi cloud storage).
+  # Neu co bat ky test nao that bai, pipeline dung lai o day va khong tien hanh
+  # huan luyen hay trien khai.
+  # ---------------------------------------------------------------------------
   test:
-    name: Test
+    name: Unit Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,13 +30,19 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run tests
-        run: pytest tests/ -v
+      - name: Run unit tests
+        # TODO 1: Viet lenh de chay pytest tren thu muc tests/ voi co -v
+        run: # <dien lenh o day>
 
-  # JOB 2: Huan luyen mo hinh tren du lieu thuc, upload artifact len cloud storage
+
+  # ---------------------------------------------------------------------------
+  # JOB 2 - TRAIN
+  # Xac thuc cloud storage, pull du lieu bang DVC, huan luyen mo hinh, upload artifact.
+  # Chi chay khi Job 1 (Unit Test) hoan thanh thanh cong.
+  # ---------------------------------------------------------------------------
   train:
     name: Train
-    needs: test              # Chi chay khi job test qua
+    needs: test
     runs-on: ubuntu-latest
     outputs:
       accuracy: ${{ steps.read_metrics.outputs.accuracy }}
@@ -47,75 +58,41 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Authenticate to Cloud Storage
-        # For AWS, we set the credentials from the secret and set the endpoint URL for ministack
+        # TODO 2: Ghi noi dung credentials ra file tam va set bien moi truong xac thuc.
+        # GCP:   echo '${{ secrets.CLOUD_CREDENTIALS }}' > /tmp/sa-key.json
+        #        echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa-key.json" >> $GITHUB_ENV
+        # AWS:   echo "AWS_ACCESS_KEY_ID=..." >> $GITHUB_ENV  (lay tu secrets)
+        #        echo "AWS_SECRET_ACCESS_KEY=..." >> $GITHUB_ENV
+        # Azure: echo "AZURE_STORAGE_CONNECTION_STRING=..." >> $GITHUB_ENV
         run: |
-          # Parse the JSON secret to get AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
-          export AWS_ACCESS_KEY_ID=${{ fromJSON(secrets.CLOUD_CREDENTIALS).aws_access_key_id }}
-          export AWS_SECRET_ACCESS_KEY=${{ fromJSON(secrets.CLOUD_CREDENTIALS).aws_secret_access_key }}
-          # Set the region and endpoint URL for ministack
-          export AWS_DEFAULT_REGION=us-east-1
-          export AWS_ENDPOINT_URL=http://host.docker.internal:4566
-          # For S3 path style requests
-          export AWS_S3_ADDRESSING=path
-          # Also set these for boto3 in the download_model function
-          echo "AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID" >> $GITHUB_ENV
-          echo "AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY" >> $GITHUB_ENV
-          echo "AWS_DEFAULT_REGION=$AWS_DEFAULT_REGION" >> $GITHUB_ENV
-          echo "AWS_ENDPOINT_URL=$AWS_ENDPOINT_URL" >> $GITHUB_ENV
-          echo "AWS_S3_ADDRESSING=$AWS_S3_ADDRESSING" >> $GITHUB_ENV
+          # <dien code o day>
 
       - name: Pull data with DVC
-        # Configure DVC remote to use our ministack S3 endpoint
-        run: |
-          # Debug: show current directory and list files
-          echo "Current directory: $(pwd)"
-          echo "Listing files:"
-          ls -la
-          # Check if .dvc directory exists, if not initialize DVC
-          if [ ! -d ".dvc" ]; then
-            echo ".dvc directory does NOT exist, initializing DVC"
-            dvc init
-          else
-            echo ".dvc directory exists"
-          fi
-          # Set the DVC remote endpoint to ministack using the environment variable from authentication
-          dvc remote modify myremote endpointurl $AWS_ENDPOINT_URL
-          # Test if we can reach the endpoint before pulling
-          echo "Testing connection to DVC endpoint..."
-          if ! curl -s $AWS_ENDPOINT_URL > /dev/null; then
-            echo "WARNING: Cannot reach DVC endpoint at $AWS_ENDPOINT_URL"
-            echo "Generating data locally using generate_data.py..."
-            python generate_data.py
-          else
-            # Pull the data
-            dvc pull || echo "DVC pull failed, continuing with local data if available"
-          fi
+        # TODO 3: Pull cac file du lieu can thiet tu cloud storage bang lenh dvc pull.
+        #         Chi pull train_phase1.csv va eval.csv (khong can train_phase2.csv).
+        run: # <dien lenh o day>
 
       - name: Train model
         run: python src/train.py
 
       - name: Read metrics
         id: read_metrics
+        # TODO 4: Doc gia tri "accuracy" tu outputs/metrics.json bang Python inline.
+        #         Set ket qua thanh output "accuracy" de job deploy co the doc.
+        #
+        # Goi y:
+        #   ACC=$(python -c "import json; d=json.load(open('outputs/metrics.json')); print(d['accuracy'])")
+        #   echo "accuracy=$ACC" >> $GITHUB_OUTPUT
         run: |
-          # Read the accuracy from outputs/metrics.json and set it as an output
-          ACCURACY=$(python -c "import json; print(json.load(open('outputs/metrics.json'))['accuracy'])")
-          echo "accuracy=$ACCURACY" >> $GITHUB_OUTPUT
+          # <dien code o day>
 
       - name: Upload model to Cloud Storage
-        # Upload the model to S3 using boto3
+        # TODO 5: Su dung cloud SDK de upload models/model.pkl len
+        #         <bucket>/models/latest/model.pkl.
+        #         Ten bucket lay tu secret CLOUD_BUCKET.
         run: |
           python - <<'EOF'
-          import boto3
-          import os
-          bucket = os.environ["CLOUD_BUCKET"]
-          s3_client = boto3.client(
-              's3',
-              endpoint_url=os.getenv('AWS_ENDPOINT_URL', 'http://localhost:4566'),
-              aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-              aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY')
-          )
-          s3_client.upload_file('models/model.pkl', bucket, 'models/latest/model.pkl')
-          print(f"Uploaded model.pkl to s3://{bucket}/models/latest/model.pkl")
+          # <dien code Python o day>
           EOF
 
       - name: Save metrics as artifact
@@ -124,84 +101,59 @@ jobs:
           name: metrics
           path: outputs/metrics.json
 
-  # JOB 3: Kiem tra chat luong - chi cho phep deploy khi accuracy >= 0.67
+
+  # ---------------------------------------------------------------------------
+  # JOB 3 - EVAL
+  # Kiem tra nguong chat luong (accuracy >= 0.70).
+  # Pipeline dung lai o day neu mo hinh chua dat yeu cau.
+  # Chi chay khi Job 2 (Train) hoan thanh thanh cong.
+  # ---------------------------------------------------------------------------
   eval:
     name: Eval
-    needs: train             # Chi chay khi job train qua
+    needs: train
     runs-on: ubuntu-latest
     steps:
 
       - name: Check eval gate
+        # TODO 6: Doc accuracy tu output cua job train.
+        #         Neu accuracy < 0.70, ket thuc voi loi ro rang.
+        #         Neu dat nguong, in thong bao va tiep tuc.
+        #
+        # Goi y:
+        #   acc = float("${{ needs.train.outputs.accuracy }}")
+        #   if acc < 0.70:
+        #       raise SystemExit(f"FAILED: accuracy {acc:.4f} < 0.70. Huy deploy.")
+        #   print("PASSED: dang trien khai model.")
         run: |
-          # Get the accuracy from the train job output
-          ACCURACY="${{ needs.train.outputs.accuracy }}"
-          echo "Accuracy from train job: $ACCURACY"
-          # Convert to float and check if it's >= 0.67
           python - <<'EOF'
-          import sys
-          accuracy = float("${{ needs.train.outputs.accuracy }}")
-          if accuracy < 0.67:
-              print(f"Accuracy {accuracy} is below threshold 0.67. Failing the job.")
-              sys.exit(1)
-          else:
-              print(f"Accuracy {accuracy} meets threshold 0.67. Continuing.")
+          # <dien code Python o day>
           EOF
 
-  # JOB 4: Trien khai sau khi eval gate qua
+
+  # ---------------------------------------------------------------------------
+  # JOB 4 - DEPLOY
+  # Trien khai len VM qua SSH.
+  # Chi chay khi Job 3 (Eval) hoan thanh thanh cong.
+  # ---------------------------------------------------------------------------
   deploy:
     name: Deploy
-    needs: eval              # Chi chay khi job eval qua
+    needs: eval
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: SSH deploy to VM
+        uses: appleboy/ssh-action@v1.0.3
         with:
-          python-version: "3.10"
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Download model from Cloud Storage
-        run: |
-          python - <<'EOF'
-          import boto3
-          import os
-          bucket = os.environ["CLOUD_BUCKET"]
-          s3_client = boto3.client(
-              's3',
-              endpoint_url=os.getenv('AWS_ENDPOINT_URL', 'http://localhost:4566'),
-              aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID', 'test'),
-              aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY', 'test')
-          )
-          os.makedirs("models", exist_ok=True)
-          s3_client.download_file(bucket, "models/latest/model.pkl", "models/model.pkl")
-          print(f"Downloaded model.pkl from s3://{bucket}/models/latest/model.pkl")
-          EOF
-        env:
-          AWS_ACCESS_KEY_ID: ${{ fromJSON(secrets.CLOUD_CREDENTIALS).aws_access_key_id }}
-          AWS_SECRET_ACCESS_KEY: ${{ fromJSON(secrets.CLOUD_CREDENTIALS).aws_secret_access_key }}
-          AWS_ENDPOINT_URL: http://host.docker.internal:4566
-          CLOUD_BUCKET: ${{ secrets.CLOUD_BUCKET }}
-
-      - name: Start local serving (simulate VM deployment)
-        run: |
-          # Start the FastAPI server in background
-          cd src
-          nohup python serve.py > /tmp/serve.log 2>&1 &
-          echo "Waiting for server to start..."
-          sleep 5
-          # Health check
-          curl -f http://localhost:8000/health || (echo "Health check failed" && exit 1)
-          echo "Server is healthy!"
-          # Test prediction
-          curl -X POST http://localhost:8000/predict \
-            -H "Content-Type: application/json" \
-            -d '{"features": [7.4, 0.70, 0.00, 1.9, 0.076, 11.0, 34.0, 0.9978, 3.51, 0.56, 9.4, 0]}'
-          echo ""
-          echo "Deployment successful!"
-        env:
-          S3_BUCKET: ${{ secrets.CLOUD_BUCKET }}
-          AWS_ENDPOINT_URL: http://host.docker.internal:4566
-          AWS_ACCESS_KEY_ID: ${{ fromJSON(secrets.CLOUD_CREDENTIALS).aws_access_key_id }}
-          AWS_SECRET_ACCESS_KEY: ${{ fromJSON(secrets.CLOUD_CREDENTIALS).aws_secret_access_key }}
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            # TODO 7: Restart service mlops-serve tren VM.
+            # TODO 8: Cho server san sang roi goi curl /health de xac nhan.
+            #         Neu health check that bai sau nhieu lan thu, thoat voi exit 1.
+            #
+            # Goi y:
+            #   sudo systemctl restart mlops-serve
+            #   sleep 5
+            #   curl -sf http://localhost:8000/health && echo "Health check passed." || exit 1
+            # <dien lenh bash o day>
