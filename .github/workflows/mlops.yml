@@ -67,8 +67,8 @@ jobs:
       - name: Pull data with DVC
         # Configure DVC remote to use our ministack S3 endpoint
         run: |
-          # Set the DVC remote endpoint to ministack
-          dvc remote modify myremote endpointurl http://host.docker.internal:4566
+          # Set the DVC remote endpoint to ministack using the environment variable from authentication
+          dvc remote modify myremote endpointurl $AWS_ENDPOINT_URL
           # Pull the data
           dvc pull
 
