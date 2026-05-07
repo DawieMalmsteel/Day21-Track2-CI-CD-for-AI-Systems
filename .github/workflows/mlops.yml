@@ -63,11 +63,7 @@ jobs:
       - name: Read metrics
         id: read_metrics
         run: |
-          ACC=$(python - <<'PY'
-          import json
-          print(json.load(open('outputs/metrics.json'))['accuracy'])
-          PY
-          )
+          ACC=$(python -c "import json,sys; print(json.load(open('outputs/metrics.json'))['accuracy'])")
           echo "accuracy=$ACC" >> $GITHUB_OUTPUT
 
       - name: Upload model to Cloud Storage
