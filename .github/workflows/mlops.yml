@@ -46,13 +46,17 @@ jobs:
 
       - name: Authenticate to Cloud Storage
         run: |
-          # Write credentials to disk safely and export env for SDKs
-          printf '%s' "${{ secrets.CLOUD_CREDENTIALS }}" > /tmp/sa-key.json
+          # Ghi credentials an toàn bằng cat
+          cat <<EOF > /tmp/sa-key.json
+          ${{ secrets.CLOUD_CREDENTIALS }}
+          EOF
+          
           chmod 600 /tmp/sa-key.json
           echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/sa-key.json" >> $GITHUB_ENV
           echo "CLOUD_BUCKET=${{ secrets.CLOUD_BUCKET }}" >> $GITHUB_ENV
-          # Ensure DVC knows where credentials are
-          dvc remote modify myremote credentialpath /tmp/sa-key.json || true
+          
+          # Cấu hình DVC sử dụng file key này
+          dvc remote modify myremote --local credentialpath /tmp/sa-key.json
 
       - name: Pull data with DVC
         run: |
