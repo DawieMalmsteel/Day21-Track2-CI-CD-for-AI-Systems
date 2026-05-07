@@ -71,11 +71,12 @@ jobs:
           echo "Current directory: $(pwd)"
           echo "Listing files:"
           ls -la
-          # Check if .dvc directory exists
-          if [ -d ".dvc" ]; then
-            echo ".dvc directory exists"
+          # Check if .dvc directory exists, if not initialize DVC
+          if [ ! -d ".dvc" ]; then
+            echo ".dvc directory does NOT exist, initializing DVC"
+            dvc init
           else
-            echo ".dvc directory does NOT exist"
+            echo ".dvc directory exists"
           fi
           # Set the DVC remote endpoint to ministack using the environment variable from authentication
           dvc remote modify myremote endpointurl $AWS_ENDPOINT_URL
