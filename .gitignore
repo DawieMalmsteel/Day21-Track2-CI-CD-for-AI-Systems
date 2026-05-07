@@ -9,5 +9,7 @@ sa-key.json
 .env
 .venv/
 __pycache__/
+deploy_key
+deploy_key.pub
 *.pyc
 .DS_Store
