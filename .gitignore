@@ -1,8 +1,10 @@
 mlflow.db
 mlartifacts/
 models/
+!models/
 !models/*.dvc
 outputs/
+!outputs/
 !outputs/*.json
 data/train_phase1.csv
 data/eval.csv
