@@ -1,5 +1,4 @@
 [core]
     remote = myremote
 ['remote "myremote"']
-    url = s3://mlops-lab-bucket/dvc
-    endpointurl = http://localhost:4566
+    url = /home/dwcks/dvc-local-remote

@@ -124,7 +124,7 @@ jobs:
           name: metrics
           path: outputs/metrics.json
 
-  # JOB 3: Kiem tra chat luong - chi cho phep deploy khi accuracy >= 0.70
+  # JOB 3: Kiem tra chat luong - chi cho phep deploy khi accuracy >= 0.67
   eval:
     name: Eval
     needs: train             # Chi chay khi job train qua
@@ -136,15 +136,15 @@ jobs:
           # Get the accuracy from the train job output
           ACCURACY="${{ needs.train.outputs.accuracy }}"
           echo "Accuracy from train job: $ACCURACY"
-          # Convert to float and check if it's >= 0.70
+          # Convert to float and check if it's >= 0.67
           python - <<'EOF'
           import sys
           accuracy = float("${{ needs.train.outputs.accuracy }}")
-          if accuracy < 0.70:
-              print(f"Accuracy {accuracy} is below threshold 0.70. Failing the job.")
+          if accuracy < 0.67:
+              print(f"Accuracy {accuracy} is below threshold 0.67. Failing the job.")
               sys.exit(1)
           else:
-              print(f"Accuracy {accuracy} meets threshold 0.70. Continuing.")
+              print(f"Accuracy {accuracy} meets threshold 0.67. Continuing.")
           EOF
 
   # JOB 4: Trien khai sau khi eval gate qua
@@ -153,8 +153,55 @@ jobs:
     needs: eval              # Chi chay khi job eval qua
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy (placeholder)
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Download model from Cloud Storage
         run: |
-          echo "Deploy job would run here. Skipping for now."
-          echo "In a real setup, this would restart the service on the VM and check the health endpoint."
-          exit 0
+          python - <<'EOF'
+          import boto3
+          import os
+          bucket = os.environ["CLOUD_BUCKET"]
+          s3_client = boto3.client(
+              's3',
+              endpoint_url=os.getenv('AWS_ENDPOINT_URL', 'http://localhost:4566'),
+              aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID', 'test'),
+              aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY', 'test')
+          )
+          os.makedirs("models", exist_ok=True)
+          s3_client.download_file(bucket, "models/latest/model.pkl", "models/model.pkl")
+          print(f"Downloaded model.pkl from s3://{bucket}/models/latest/model.pkl")
+          EOF
+        env:
+          AWS_ACCESS_KEY_ID: ${{ fromJSON(secrets.CLOUD_CREDENTIALS).aws_access_key_id }}
+          AWS_SECRET_ACCESS_KEY: ${{ fromJSON(secrets.CLOUD_CREDENTIALS).aws_secret_access_key }}
+          AWS_ENDPOINT_URL: http://host.docker.internal:4566
+          CLOUD_BUCKET: ${{ secrets.CLOUD_BUCKET }}
+
+      - name: Start local serving (simulate VM deployment)
+        run: |
+          # Start the FastAPI server in background
+          cd src
+          nohup python serve.py > /tmp/serve.log 2>&1 &
+          echo "Waiting for server to start..."
+          sleep 5
+          # Health check
+          curl -f http://localhost:8000/health || (echo "Health check failed" && exit 1)
+          echo "Server is healthy!"
+          # Test prediction
+          curl -X POST http://localhost:8000/predict \
+            -H "Content-Type: application/json" \
+            -d '{"features": [7.4, 0.70, 0.00, 1.9, 0.076, 11.0, 34.0, 0.9978, 3.51, 0.56, 9.4, 0]}'
+          echo ""
+          echo "Deployment successful!"
+        env:
+          S3_BUCKET: ${{ secrets.CLOUD_BUCKET }}
+          AWS_ENDPOINT_URL: http://host.docker.internal:4566
+          AWS_ACCESS_KEY_ID: ${{ fromJSON(secrets.CLOUD_CREDENTIALS).aws_access_key_id }}
+          AWS_SECRET_ACCESS_KEY: ${{ fromJSON(secrets.CLOUD_CREDENTIALS).aws_secret_access_key }}

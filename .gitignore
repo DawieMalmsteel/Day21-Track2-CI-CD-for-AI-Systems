@@ -13,3 +13,5 @@ deploy_key
 deploy_key.pub
 *.pyc
 .DS_Store
+mlruns/
+mlartifacts/
