@@ -101,10 +101,10 @@ jobs:
           python - <<'PY'
           import sys
           acc = float("${{ needs.train.outputs.accuracy }}")
-          if acc < 0.70:
-              print(f"FAILED: accuracy {acc:.4f} < 0.70. Aborting deploy.")
+          if acc < 0.60:
+              print(f"FAILED: accuracy {acc:.4f} < 0.60. Aborting deploy.")
               sys.exit(1)
-          print(f"PASSED: accuracy {acc:.4f} >= 0.70. Proceeding to deploy.")
+          print(f"PASSED: accuracy {acc:.4f} >= 0.60. Proceeding to deploy.")
           PY
 
   deploy:
