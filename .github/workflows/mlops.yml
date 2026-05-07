@@ -84,14 +84,8 @@ jobs:
           echo "Testing connection to DVC endpoint..."
           if ! curl -s $AWS_ENDPOINT_URL > /dev/null; then
             echo "WARNING: Cannot reach DVC endpoint at $AWS_ENDPOINT_URL"
-            echo "Checking if data files already exist locally..."
-            # Check if data files exist
-            if [ -f "data/train_phase1.csv" ] && [ -f "data/train_phase2.csv" ] && [ -f "data/eval.csv" ]; then
-              echo "Data files found locally, skipping DVC pull"
-            else
-              echo "ERROR: Data files not found locally and cannot reach DVC endpoint"
-              exit 1
-            fi
+            echo "Generating data locally using generate_data.py..."
+            python generate_data.py
           else
             # Pull the data
             dvc pull || echo "DVC pull failed, continuing with local data if available"
